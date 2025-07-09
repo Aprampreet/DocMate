@@ -1,0 +1,452 @@
+from ninja import NinjaAPI, Router, File, Form
+from ninja.files import UploadedFile
+from .models import *
+from .schemas import *
+from auth_app.auth_backend import JWTAuth
+from auth_app.api import auth_router
+from typing import List
+from ninja.errors import HttpError
+from datetime import time,datetime
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+from .ocr import *
+import os
+from .llm import *
+api = NinjaAPI()
+doctor_router = Router()
+appointment_router = Router()
+api.add_router("/", auth_router)
+api.add_router('doctor/', doctor_router)
+api.add_router("appointment/", appointment_router)
+
+
+@doctor_router.post("/apply", auth=JWTAuth())
+def apply_for_doctor(
+    request,
+    official_name:str = Form(...),
+    specialization: str = Form(...),
+    specialization1: str = Form(...),
+    specialization2: Optional[str] = Form(None),
+    specialization3: Optional[str] = Form(None),
+    specialization4: Optional[str] = Form(None),
+    experience: str = Form(...),
+    education: str = Form(...),
+    phone_number: str = Form(...),
+    address: str = Form(...),
+    about_you: str = Form(...),
+    license_document: UploadedFile = File(...),
+    doctor_profile_pic:UploadedFile = File(...)
+):
+    user = request.user
+
+    if hasattr(user, 'doctor_application'):
+        return {"error": "You already applied."}
+
+    DoctorApplication.objects.create(
+        user=user,
+        official_name=official_name,
+        specialization=specialization,
+        specialization1=specialization1,
+        specialization2=specialization2,
+        specialization3=specialization3,
+        specialization4=specialization4,
+        experience=experience,
+        education=education,
+        phone_number=phone_number,
+        address=address,
+        about_you=about_you,
+        license_document=license_document,
+        doctor_profile_pic=doctor_profile_pic,
+    )
+
+    return {"message": "Application submitted successfully."}
+
+
+@doctor_router.get("/applications", response=List[DoctorApplicationOut], auth=JWTAuth())
+def list_doctors_applications(request):
+    if not request.user.is_staff:
+        return 403, {"error": "You are not authorized."}
+
+    applications = DoctorApplication.objects.select_related('user').all()
+
+    return [
+        DoctorApplicationOut(
+            id=app.id,
+            user_email=app.user.email,
+            specialization=app.specialization,
+            experience=app.experience,
+            status=app.status,
+        )
+        for app in applications
+    ]
+
+
+@doctor_router.put("/applications/{app_id}/review", auth=JWTAuth())
+def review_doctor_application(request, app_id: int, data: ApplicationReviewIn):
+    if not request.user.is_staff:
+        raise HttpError(403, "You are not authorized.")
+
+    try:
+        application = DoctorApplication.objects.select_related('user').get(id=app_id)
+    except DoctorApplication.DoesNotExist:
+        raise HttpError(404, "Application not found")
+
+    if data.status not in ['approved', 'pending', 'rejected']:
+        raise HttpError(400, "Invalid status")
+
+    application.status = data.status
+    application.remarks = data.remarks
+    application.save()  
+    if data.status == 'rejected':
+        application.delete()
+
+    return {"message": f"Application {data.status} successfully"}
+
+
+@doctor_router.get('/list', response=List[ApprovedDoctorOut])
+def list_approved_doctors(request):
+    approved_profiles = DoctorProfile.objects.select_related('user').all()
+
+    return [
+        ApprovedDoctorOut(
+            id=profile.id,  # ✅ This is important change
+            full_name=profile.user.full_name,
+            name=profile.official_name,
+            email=profile.user.email,
+            specialization=profile.specialization,
+            experience=profile.experience,
+            profile_pic=request.build_absolute_uri(profile.doctor_profile_pic.url) if profile.doctor_profile_pic else None,
+        )
+        for profile in approved_profiles
+    ]
+
+
+
+@doctor_router.get("/detail/{doctor_id}", response=DoctorDetailOut, auth=JWTAuth())
+def get_doctor_detail(request, doctor_id: int):
+    try:
+        profile = DoctorProfile.objects.select_related("user").get(user__id=doctor_id)
+        user = profile.user
+    except DoctorProfile.DoesNotExist:
+        raise HttpError(404, "Doctor profile not found")
+
+    return {
+        "id": user.id,
+        "full_name": user.full_name,
+        "official_name": profile.official_name,
+        "email": user.email,
+        "profile_pic": request.build_absolute_uri(profile.doctor_profile_pic.url) if profile.doctor_profile_pic else None,
+        "specialization": profile.specialization,
+        "specialization1": profile.specialization1,
+        "specialization2": profile.specialization2,
+        "specialization3": profile.specialization3,
+        "specialization4": profile.specialization4,
+        "experience": profile.experience,
+        "education": profile.education,
+        "address": profile.address,
+        "about_you": profile.about_you,
+        "patients_treated":profile.patients_treated,
+        "bio": user.profile.bio if hasattr(user, 'profile') else "",
+        "phone_number": profile.phone_number,
+        "consultation_fee":profile.consultation_fee,
+        "location": user.profile.location if hasattr(user, 'profile') else "",
+        "rating": 4.0,
+        "availabilities": [
+            AvailabilityOut(
+                day=a.day,
+                start_time=a.start_time,
+                end_time=a.end_time,
+                is_off=a.is_off
+            ) for a in profile.availabilities.all().order_by('day')
+        ]
+    }
+
+@doctor_router.get("/doctor_profile", response=DoctorDetailOut, auth=JWTAuth())
+def get_doctor_profile(request):
+    user = request.user
+    if not user.is_doctor:
+        raise HttpError(403, "You are not authorized as a doctor")
+
+    try:
+        profile = DoctorProfile.objects.select_related("user").get(user=user)
+    except DoctorProfile.DoesNotExist:
+        raise HttpError(404, "Doctor profile not found")
+
+    return {
+        "id": user.id,
+        "full_name": user.full_name,
+        "official_name": profile.official_name,
+        "email": user.email,
+        "profile_pic": request.build_absolute_uri(profile.doctor_profile_pic.url) if profile.doctor_profile_pic else None,
+        "specialization": profile.specialization,
+        "specialization1": profile.specialization1,
+        "specialization2": profile.specialization2,
+        "specialization3": profile.specialization3,
+        "specialization4": profile.specialization4,
+        "experience": profile.experience,
+        "education": profile.education,
+        "address": profile.address,
+        "consultation_fee":profile.consultation_fee,
+        "about_you": profile.about_you,
+        "bio": getattr(user.profile, "bio", ""),  
+        "phone_number": profile.phone_number,
+        "patients_treated":profile.patients_treated,
+        "location": getattr(user.profile, "location", ""),
+        "rating": 4.0,
+        "availabilities": [
+            AvailabilityOut(
+                day=a.day,
+                start_time=a.start_time,
+                end_time=a.end_time,
+                is_off=a.is_off
+            )
+            for a in profile.availabilities.all()
+        ]
+    }
+
+
+@doctor_router.put("/profile/update", auth=JWTAuth())
+def update_doctor_profile(
+    request,
+    official_name: Optional[str] = Form(None),
+    specialization: Optional[str] = Form(None),
+    specialization1: Optional[str] = Form(None),
+    specialization2: Optional[str] = Form(None),
+    specialization3: Optional[str] = Form(None),
+    specialization4: Optional[str] = Form(None),
+    experience: Optional[str] = Form(None),
+    education: Optional[str] = Form(None),
+    phone_number: Optional[str] = Form(None),
+    address: Optional[str] = Form(None),
+    about_you: Optional[str] = Form(None),
+    bio: Optional[str] = Form(None),
+    consultation_fee:Optional[str] = Form(None),
+    doctor_profile_pic: Optional[UploadedFile] = File(None)
+):
+    user = request.user
+
+    if not user.is_doctor:
+        raise HttpError(403, "Not authorized")
+
+    try:
+        profile = DoctorProfile.objects.get(user=user)
+    except DoctorProfile.DoesNotExist:
+        raise HttpError(404, "Doctor profile not found")
+
+    profile_fields = [
+        "official_name", "specialization", "specialization1", "specialization2", "specialization3", "specialization4",
+        "experience", "education", "phone_number", "address", "about_you", "bio",'consultation_fee'
+    ]
+    
+    for field in profile_fields:
+        value = locals()[field]
+        if value is not None:
+            setattr(profile, field, value)
+
+    if doctor_profile_pic:
+        profile.doctor_profile_pic.save(doctor_profile_pic.name, doctor_profile_pic)
+
+    profile.save()
+    return {"detail": "Doctor profile updated successfully"}
+
+    
+
+
+@doctor_router.put("/update_availabilities", auth=JWTAuth())
+def update_availability(request, data: List[AvailabilityIn]):
+    user = request.user
+    if not user.is_doctor:
+        raise HttpError(403, "Unauthorized")
+    
+    try:
+        profile = DoctorProfile.objects.get(user=user)
+    except DoctorProfile.DoesNotExist:
+        raise HttpError(404, "Doctor profile not found")
+
+    for item in data:
+        # Either update or create new for that day
+        availability, _ = Availability.objects.update_or_create(
+            doctor=profile,
+            day=item.day,
+            defaults={
+                "start_time": item.start_time,
+                "end_time": item.end_time,
+                "is_off": item.is_off
+            }
+        )
+
+    return {"detail": "Availabilities updated successfully"}
+
+
+
+@appointment_router.post("/book", auth=JWTAuth(), response=AppointmentOut)
+def book_appointment(request, data: AppointmentIn):
+    user = request.user 
+    if user is None:
+        raise HttpError(403, "Unauthorized")
+
+    try:
+        # ✅ use DoctorProfile.id now, not user.id
+        doctor = DoctorProfile.objects.get(id=data.doctor_id)
+    except DoctorProfile.DoesNotExist:
+        raise HttpError(404, "Doctor not found")
+
+    weekday = data.date.strftime("%A") 
+
+    availability = doctor.availabilities.filter(day__iexact=weekday).first()
+    if not availability or availability.is_off:
+        raise HttpError(400, f"Doctor is not available on {weekday}")
+
+    input_time = data.time
+    if isinstance(input_time, str):
+        input_time = datetime.strptime(input_time, "%H:%M").time()
+
+    if not (availability.start_time <= input_time <= availability.end_time):
+        raise HttpError(400, "Selected time is outside doctor's available hours")
+
+    if Appointment.objects.filter(doctor=doctor, date=data.date, time=input_time).exists():
+        raise HttpError(400, "This slot is already booked")
+
+    appointment = Appointment.objects.create(
+        user=user,  
+        doctor=doctor,
+        date=data.date,
+        time=input_time,
+        symptoms=data.symptoms,
+        patient_email=data.patient_email,
+        patient_phone=data.patient_phone,
+        fee_paid=False,
+        completed=False,
+    )
+
+    return {
+        "id": appointment.id,
+        "doctor_name": doctor.official_name,
+        "date": appointment.date,
+        "time": appointment.time,
+        "symptoms": appointment.symptoms,
+        "status": appointment.status,
+        "fee_paid": appointment.fee_paid,
+        "completed": appointment.completed,
+        "patient_email": appointment.patient_email,
+        "patient_phone": appointment.patient_phone,
+    }
+
+
+    
+
+   
+@appointment_router.get("/list", response=List[AppointmentOut], auth=JWTAuth())
+def get_user_appointments(request):
+    user = request.user
+    if user is None:
+        raise HttpError(403, "Unauthorized")
+    appointments = Appointment.objects.filter(user=user).select_related('user', 'doctor').order_by('-date', '-time')
+
+    return [
+        AppointmentOut(
+            id=app.id,
+            doctor_name=app.doctor.official_name,
+            date=app.date,
+            time=app.time,
+            symptoms=app.symptoms,
+            status=app.status,
+            fee_paid=app.fee_paid,
+            completed=app.completed,
+            patient_email=app.patient_email,
+            patient_phone=app.patient_phone
+        )
+        for app in appointments
+    ]
+
+
+@appointment_router.get('/doctor', response=List[AppointmentOut], auth=JWTAuth())
+def get_doctors_appointment(request):
+    user = request.user
+
+    if not user.is_doctor:
+        raise HttpError(403, "Only doctors can access their appointments")
+
+    try:
+        doctor_profile = DoctorProfile.objects.get(user=user)
+    except DoctorProfile.DoesNotExist:
+        raise HttpError(404, "Doctor profile not found")
+
+    appointments = Appointment.objects.filter(doctor=doctor_profile).select_related('user').order_by('-date', '-time')
+
+    return [
+        AppointmentOut(
+            id=app.id,
+            doctor_name=doctor_profile.official_name,
+            date=app.date,
+            time=app.time,
+            symptoms=app.symptoms,
+            status=app.status,
+            fee_paid=app.fee_paid,
+            completed=app.completed,
+            patient_email=app.patient_email,
+            patient_phone=app.patient_phone
+        )
+        for app in appointments
+    ]
+
+
+
+@appointment_router.put("/{appointment_id}/status", auth=JWTAuth())
+def update_appointment_status(request, appointment_id: int, data: UpdateAppointmentStatusIn):
+    user = request.user
+    if not user.is_doctor:
+        raise HttpError(403, "Only doctors can update appointment status")
+
+    try:
+        doctor_profile = DoctorProfile.objects.get(user=user)
+    except DoctorProfile.DoesNotExist:
+        raise HttpError(404, "Doctor profile not found")
+
+    try:
+        appointment = Appointment.objects.get(id=appointment_id, doctor=doctor_profile)
+    except Appointment.DoesNotExist:
+        raise HttpError(404, "Appointment not found")
+
+    if data.status not in ['confirmed', 'cancelled', 'completed']:
+        raise HttpError(400, "Invalid status")
+
+    appointment.status = data.status
+    appointment.completed = (data.status == 'completed')
+    appointment.save()
+
+    return {"detail": f"Appointment marked as {data.status}"}
+
+@appointment_router.post("/report-scan", response=ReportScanPublicResponse, auth=JWTAuth())
+def create_report_scan(request, image: UploadedFile):
+    path = default_storage.save(f'reports/{image.name}', ContentFile(image.read()))
+    full_path = os.path.join(settings.MEDIA_ROOT, path)
+
+    extracted_report = extract_text_from_image(full_path)
+    print("Extracted Report:", extracted_report)
+
+    report_info = get_report_info(extracted_report)
+    print('QROQ response: ', report_info)
+
+    raw_specializations = report_info.get("doctor_specialization")
+    if not isinstance(raw_specializations, list):
+        raw_specializations = [raw_specializations or "General Physician"]
+
+    report_obj = ReportScan.objects.create(
+        user=request.user,
+        image=path,
+        report_test_name=report_info.get("report_test_name") or "Unknown",
+        extracted_report=extracted_report or "No text extracted.",
+        symptoms=report_info.get("symptoms") or "No symptoms found.",
+        precautions=report_info.get("precautions") or "No precautions provided.",
+        emergency=report_info.get("emergency") or "Normal",
+        recommended_specializations=", ".join(raw_specializations)
+    )
+
+    return {
+        "report_test_name": report_obj.report_test_name,
+        "symptoms": report_obj.symptoms,
+        "precautions": report_obj.precautions,
+        "emergency": report_obj.emergency,
+        "recommended_specializations": raw_specializations
+    }
