@@ -450,3 +450,87 @@ def create_report_scan(request, image: UploadedFile):
         "emergency": report_obj.emergency,
         "recommended_specializations": raw_specializations
     }
+
+@appointment_router.get("/doctors-by-specialization", response=List[ApprovedDoctorOut], auth=JWTAuth())
+def get_doctors_by_specialization(request, specialization: str):
+    doctors = DoctorProfile.objects.filter(
+        models.Q(specialization__icontains=specialization) |
+        models.Q(specialization1__icontains=specialization) |
+        models.Q(specialization2__icontains=specialization) |
+        models.Q(specialization3__icontains=specialization) |
+        models.Q(specialization4__icontains=specialization)
+    )
+
+    return [
+        ApprovedDoctorOut(
+            id=doc.id,
+            full_name=doc.user.full_name,
+            name=doc.official_name or doc.user.full_name,
+            email=doc.user.email,
+            specialization=doc.specialization,
+            experience=doc.experience,
+            profile_pic=doc.doctor_profile_pic.url if doc.doctor_profile_pic else None
+        )
+        for doc in doctors
+    ]
+
+
+@appointment_router.post("/submit-review", response={200: dict, 403: dict, 400: dict},auth=JWTAuth())
+def submit_doctor_review(request, data: ReviewIn):
+    try:
+        doctor = DoctorProfile.objects.get(id=data.doctor_id)
+    except DoctorProfile.DoesNotExist:
+        return 400, {"message": "Doctor does not exist."}
+
+    has_completed_appointment = Appointment.objects.filter(
+        user=request.user,
+        doctor=doctor,
+        completed=True
+    ).exists()
+
+    if not has_completed_appointment:
+        return 403, {"message": "You can only review a doctor after completing an appointment."}
+
+    if DoctorReview.objects.filter(user=request.user, doctor=doctor).exists():
+        return 400, {"message": "You have already reviewed this doctor."}
+
+    DoctorReview.objects.create(
+        user=request.user,
+        doctor=doctor,
+        rating=data.rating,
+        comment=data.comment or ""
+    )
+
+    return 200, {"message": "Review submitted successfully."}
+
+
+@appointment_router.get("/doctor-reviews/{doctor_id}", response=dict,auth=JWTAuth())
+def get_doctor_reviews(request, doctor_id: int):
+    try:
+        doctor = DoctorProfile.objects.get(id=doctor_id)
+    except DoctorProfile.DoesNotExist:
+        raise HttpError(404, "Doctor not found.")
+
+    reviews_qs = DoctorReview.objects.filter(doctor=doctor).order_by("-created_at")
+
+    reviews = [
+        ReviewOut(
+            user_name=review.user.full_name,
+            rating=review.rating,
+            comment=review.comment,
+            created_at=review.created_at.strftime("%Y-%m-%d %H:%M")
+        ) for review in reviews_qs
+    ]
+
+    # ✅ This is the key line:
+    has_appointment = Appointment.objects.filter(
+        user=request.user,
+        doctor=doctor,
+        completed=True
+    ).exists()
+
+    # ✅ Return as object, not list
+    return {
+        "reviews": reviews,
+        "has_appointment": has_appointment
+    }

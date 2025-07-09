@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { bookAppointment, fetchDoctorDetail } from "../services/api";
 import { toast } from "react-toastify"; 
 export default function BookAppointment() {
@@ -14,14 +15,14 @@ export default function BookAppointment() {
   });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-
+  const navigate = useNavigate()
   useEffect(() => {
     async function loadDoctor() {
       try {
         const data = await fetchDoctorDetail(doctorId);
         setDoctor(data);
       } catch (err) {
-        toast.error("❌ Failed to load doctor details");
+        toast.error(" Failed to load doctor details");
       } finally {
         setLoading(false);
       }
@@ -39,8 +40,9 @@ export default function BookAppointment() {
     try {
       await bookAppointment({ ...form, doctor_id: parseInt(doctorId) });
       toast.success("✅ Appointment booked successfully!");
+      navigate('/doctors')
     } catch (err) {
-      toast.error(`❌ Booking failed: ${err.message}`);
+      toast.error(`Booking failed: ${err.message}`);
     } finally {
       setSubmitting(false);
     }

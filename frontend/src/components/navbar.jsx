@@ -49,9 +49,7 @@ export default function Navbar() {
     navigate("/login");
   };
 
-  // Helper function to determine if a link is active
   const isActiveLink = (href) => {
-    // Special case for home page
     if (href === "/") {
       return location.pathname === "/";
     }
@@ -73,6 +71,7 @@ export default function Navbar() {
     { name: "About", href: "/about" },
     { name: "Contact", href: "/contact" },
     { name: "Profile", href: "/profile" },
+    { name: "AI Reports", href: "/upload/report" },
   ];
 
   const dashboardLink = { name: "Dashboard", href: "/doctor/doctor_profile" };

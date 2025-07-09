@@ -10,4 +10,5 @@ class DoctorApplicationAdmin(admin.ModelAdmin):
 admin.site.register(DoctorProfile)   
 admin.site.register(Availability) 
 admin.site.register(Appointment) 
+admin.site.register(DoctorReview)
 admin.site.register(ReportScan)

@@ -279,3 +279,60 @@ export async function uploadReportScan(imageFile) {
   return await response.json();
 
 }
+
+
+export async function getDoctorsBySpecialization(specialization) {
+  const token = localStorage.getItem('access_token');
+
+  const response = await fetch(
+    `${BASE_URL}/appointment/doctors-by-specialization?specialization=${encodeURIComponent(specialization)}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to fetch doctors: ${error}`);
+  }
+
+  return await response.json(); 
+}
+
+
+export async function submitDoctorReview(data, token) {
+  const response = await fetch(`${BASE_URL}/appointment/submit-review`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || "Failed to submit review");
+  }
+
+  return await response.json();
+}
+
+
+export async function getDoctorReviews(doctorId, token) {
+  const response = await fetch(`${BASE_URL}/appointment/doctor-reviews/${doctorId}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch doctor reviews");
+  }
+
+  return await response.json(); 
+}

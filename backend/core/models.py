@@ -75,6 +75,20 @@ class Availability(models.Model):
         return f"{self.doctor.user.full_name} - {self.day}"
 
 
+class DoctorReview(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    doctor = models.ForeignKey(DoctorProfile, on_delete=models.CASCADE, related_name="reviews")
+    rating = models.PositiveSmallIntegerField() 
+    comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "doctor") 
+
+    def __str__(self):
+        return f"Review by {self.user.full_name} for Dr. {self.doctor.user.full_name}"
+    
+
 class Appointment(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),

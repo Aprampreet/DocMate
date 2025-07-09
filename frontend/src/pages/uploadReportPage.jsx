@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { uploadReportScan } from "../services/api";
 import { Loader2, Upload, Stethoscope, UserSearch } from "lucide-react";
+import DoctorsList from "../pages/DoctorsListReport";
 
 export default function UploadReportPage() {
   const [image, setImage] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showDoctors, setShowDoctors] = useState(false);
+
+  const specialization = result?.recommended_specializations?.[0];
 
   const handleUpload = async () => {
     if (!image) return;
@@ -15,6 +19,7 @@ export default function UploadReportPage() {
       const token = localStorage.getItem("token");
       const response = await uploadReportScan(image, token);
       setResult(response);
+      setShowDoctors(false); // reset view
     } catch (err) {
       alert(err.message);
     }
@@ -118,12 +123,23 @@ export default function UploadReportPage() {
             {/* CTA Button */}
             <div className="text-center pt-4">
               <button
-                className="inline-flex items-center gap-2 px-6 py-2 rounded-md text-white bg-green-600 hover:bg-green-700 text-md font-medium transition"
+                onClick={() => setShowDoctors(true)}
+                className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
               >
-                <UserSearch className="h-5 w-5" />
-                Find Best Doctors
+                View Available Doctors
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Doctors List */}
+        {showDoctors && specialization && (
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 space-y-4 mt-6">
+            <h2 className="text-xl font-bold text-blue-800 flex items-center gap-2">
+              <UserSearch className="w-5 h-5" />
+              Doctors specialized in: {specialization}
+            </h2>
+            <DoctorsList specialization={specialization} />
           </div>
         )}
       </div>

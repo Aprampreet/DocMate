@@ -110,3 +110,14 @@ class ReportScanHistoryResponse(Schema):
     report_test_name: str
     emergency: str
     created_at: str
+
+class ReviewIn(Schema):
+    doctor_id: int
+    rating: int
+    comment: Optional[str]
+
+class ReviewOut(Schema):
+    user_name: str
+    rating: int
+    comment: str
+    created_at: str
