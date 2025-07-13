@@ -21,6 +21,8 @@ import DoctorAppointments from "./pages/DoctorsAppointment.jsx";
 import PrivateRoute from "./components/PrivateRoute.jsx";
 import DoctorRoute from "./components/DoctorRoute.jsx";
 import UploadReportPage from "./pages/uploadReportPage.jsx";
+import Footer from "./components/footer.jsx";
+import About from "./pages/about.jsx";
 function App() {
   return (
     <Router>
@@ -28,6 +30,7 @@ function App() {
       <Navbar />
       <Routes>
         <Route path="/" element={<Home />} />
+
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/register" element={<RegisterTheUser />} />
         <Route path="/login" element={<LoginPage />} />
@@ -40,6 +43,8 @@ function App() {
           <Route path="/doctor/apply" element={<ApplyForDoctor />} />
           <Route path="/book-appointment/:doctorId" element={<BookAppointment />} />
           <Route path="/my-appointments" element={<MyAppointments />} />
+          <Route path="/about" element={<About />} />
+
         </Route>
 
         <Route element={<DoctorRoute />}>
@@ -47,8 +52,10 @@ function App() {
           <Route path="/doctor/doctor_profile" element={<DoctorProfile />} />
           <Route path="/doctor/update_doctor_profile" element={<UpdateDoctorProfile />} />
           <Route path="/doctor/update_availabilities" element={<UpdateAvailability />} />
+          
         </Route>
       </Routes>
+      <Footer />
     </Router>
   );
 }

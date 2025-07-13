@@ -65,11 +65,9 @@ export default function Navbar() {
 
   const authLinksBase = [
     { name: "Home", href: "/" },
-    { name: "Services", href: "#" },
     { name: "Doctors", href: "/doctors" },
     { name: "Appointments", href: "/my-appointments" },
     { name: "About", href: "/about" },
-    { name: "Contact", href: "/contact" },
     { name: "Profile", href: "/profile" },
     { name: "AI Reports", href: "/upload/report" },
   ];
@@ -89,7 +87,7 @@ export default function Navbar() {
   ];
 
   return (
-    <nav className={`sticky top-0 z-50 transition-all duration-300 ${scrolled ? "bg-white shadow-lg backdrop-blur-sm bg-opacity-90" : "bg-white border-b border-gray-100"}`}>
+    <nav className={`sticky top-0 z-50 transition-all duration-300 ${scrolled ? "bg-white shadow-lg " : "bg-white border-b border-gray-100"}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}

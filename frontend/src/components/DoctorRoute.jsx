@@ -3,7 +3,7 @@ import { Outlet , Navigate } from "react-router-dom"
 import { fetchDoctorProfile } from "../services/api"
 
 export default function(){
-    const token= localStorage.getItem('access_toke')
+    const token= localStorage.getItem('access_token')
     const [isDoctor,setIsDoctor] = useState(null)
 
     useEffect(()=>{

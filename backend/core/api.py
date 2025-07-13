@@ -125,7 +125,7 @@ def list_approved_doctors(request):
 @doctor_router.get("/detail/{doctor_id}", response=DoctorDetailOut, auth=JWTAuth())
 def get_doctor_detail(request, doctor_id: int):
     try:
-        profile = DoctorProfile.objects.select_related("user").get(user__id=doctor_id)
+        profile = DoctorProfile.objects.select_related("user").get(id=doctor_id) 
         user = profile.user
     except DoctorProfile.DoesNotExist:
         raise HttpError(404, "Doctor profile not found")
