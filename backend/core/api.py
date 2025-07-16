@@ -6,7 +6,7 @@ from auth_app.auth_backend import JWTAuth
 from auth_app.api import auth_router
 from typing import List
 from ninja.errors import HttpError
-from datetime import time,datetime
+from datetime import time,datetime,timedelta
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from .ocr import *
@@ -264,6 +264,10 @@ def update_availability(request, data: List[AvailabilityIn]):
         raise HttpError(404, "Doctor profile not found")
 
     for item in data:
+        if not item.start_time or not item.end_time:
+            item.is_off = True
+        if not item.is_off and (not item.start_time or not item.end_time):
+            raise HttpError(400, f"Start and End time must be provided for day: {item.day} if not marked off.")
         # Either update or create new for that day
         availability, _ = Availability.objects.update_or_create(
             doctor=profile,
@@ -281,25 +285,42 @@ def update_availability(request, data: List[AvailabilityIn]):
 
 @appointment_router.post("/book", auth=JWTAuth(), response=AppointmentOut)
 def book_appointment(request, data: AppointmentIn):
-    user = request.user 
+    user = request.user
     if user is None:
         raise HttpError(403, "Unauthorized")
 
     try:
-        # ✅ use DoctorProfile.id now, not user.id
         doctor = DoctorProfile.objects.get(id=data.doctor_id)
     except DoctorProfile.DoesNotExist:
         raise HttpError(404, "Doctor not found")
 
-    weekday = data.date.strftime("%A") 
-
+    weekday = data.date.strftime("%A")
     availability = doctor.availabilities.filter(day__iexact=weekday).first()
+
     if not availability or availability.is_off:
         raise HttpError(400, f"Doctor is not available on {weekday}")
 
     input_time = data.time
+
+    if not input_time:
+        slot_time = availability.start_time
+        while slot_time <= availability.end_time:
+            if not Appointment.objects.filter(doctor=doctor, date=data.date, time=slot_time).exists():
+                input_time = slot_time
+                break
+            slot_time = (datetime.combine(datetime.today(), slot_time) + timedelta(minutes=30)).time()
+
+        if not input_time:
+            raise HttpError(400, "No available slots on this date")
+
     if isinstance(input_time, str):
-        input_time = datetime.strptime(input_time, "%H:%M").time()
+        try:
+            input_time = datetime.strptime(input_time, "%H:%M").time()
+        except ValueError:
+            raise HttpError(400, "Invalid time format. Use HH:MM.")
+
+    if not availability.start_time or not availability.end_time:
+        raise HttpError(400, "Doctor's available time range is not configured.")
 
     if not (availability.start_time <= input_time <= availability.end_time):
         raise HttpError(400, "Selected time is outside doctor's available hours")
@@ -308,7 +329,7 @@ def book_appointment(request, data: AppointmentIn):
         raise HttpError(400, "This slot is already booked")
 
     appointment = Appointment.objects.create(
-        user=user,  
+        user=user,
         doctor=doctor,
         date=data.date,
         time=input_time,
@@ -331,6 +352,7 @@ def book_appointment(request, data: AppointmentIn):
         "patient_email": appointment.patient_email,
         "patient_phone": appointment.patient_phone,
     }
+
 
 
     

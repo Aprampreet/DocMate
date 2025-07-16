@@ -126,7 +126,7 @@ export default function Navbar() {
                 <Link
                   key={link.name}
                   to={link.href}
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 transition-all duration-300 shadow-sm hover:shadow-md"
+                  className="px-4 py-2 item-center text-center rounded-lg text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 transition-all duration-300 shadow-sm hover:shadow-md"
                 >
                   {link.name}
                 </Link>

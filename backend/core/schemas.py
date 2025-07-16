@@ -76,7 +76,7 @@ class AvailabilityIn(Schema):
 class AppointmentIn(Schema):
     doctor_id: int
     date: date
-    time: time
+    time: Optional[time] = None
     symptoms: str
     patient_email: str
     patient_phone: str

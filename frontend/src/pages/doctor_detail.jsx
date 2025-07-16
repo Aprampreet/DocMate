@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate ,Link} from "react-router-dom";
 import { fetchDoctorDetail, getDoctorReviews } from "../services/api";
 import DoctorReviews from "../pages/DoctorReview";
 
@@ -71,9 +71,6 @@ export default function DoctorDetail() {
     doctor.specialization4,
   ].filter(Boolean);
 
-  const handleBookClick = () => {
-    navigate(`/book-appointment/${doctor.id}`);
-  };
 
   const renderStars = () => (
     <div className="flex items-center space-x-2">
@@ -130,12 +127,12 @@ export default function DoctorDetail() {
               </div>
             </div>
 
-            <button
-              onClick={handleBookClick}
+            <Link
+              to={`/book-appointment/${id}`}
               className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 px-8 rounded-lg transition-colors"
             >
               Book Appointment
-            </button>
+            </Link>
           </div>
         </div>
       </div>
