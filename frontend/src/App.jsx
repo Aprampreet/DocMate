@@ -23,6 +23,7 @@ import DoctorRoute from "./components/DoctorRoute.jsx";
 import UploadReportPage from "./pages/uploadReportPage.jsx";
 import Footer from "./components/footer.jsx";
 import About from "./pages/about.jsx";
+import NotFound from "./pages/NotFound.jsx";
 function App() {
   return (
     <Router>
@@ -54,6 +55,7 @@ function App() {
           <Route path="/doctor/update_availabilities" element={<UpdateAvailability />} />
           
         </Route>
+        <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />
     </Router>
