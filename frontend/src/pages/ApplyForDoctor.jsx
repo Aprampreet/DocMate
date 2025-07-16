@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { applyForDoctor } from "../services/api";
 import { toast } from "react-toastify";
+import {useNavigate } from "react-router-dom"
 
 export default function ApplyForDoctor() {
   const [formData, setFormData] = useState({
@@ -18,11 +19,11 @@ export default function ApplyForDoctor() {
     address: "",
     about_you: "",
   });
-
+  
   const [profilePic, setProfilePic] = useState(null);
   const [licenseDoc, setLicenseDoc] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
+  const navigate = useNavigate()
   const fields = [
     { name: "official_name", label: "Official Name", type: "text" },
     { name: "specialization", label: "Primary Specialization", type: "text" },
@@ -48,6 +49,7 @@ export default function ApplyForDoctor() {
       await applyForDoctor(formData, profilePic, licenseDoc);
       toast.success("✅ Application submitted successfully!");
 
+
       setFormData({
         official_name: "",
         specialization: "",
@@ -63,6 +65,7 @@ export default function ApplyForDoctor() {
       });
       setProfilePic(null);
       setLicenseDoc(null);
+      navigate('/doctor/doctor_profile')
     } catch (err) {
       console.error(err);
       toast.error(

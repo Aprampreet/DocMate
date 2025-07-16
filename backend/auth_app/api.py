@@ -9,7 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import AuthenticationFailed
 from ninja import Form, File
 from ninja.files import UploadedFile
-
+from .tasks import send_email_async
 
 auth_router = Router()
 User = get_user_model()
@@ -18,6 +18,11 @@ User = get_user_model()
 def register_user(request,data:RegisterSchema):
     if CustomUser.objects.filter(email=data.email).exists():
         return {"error": "User with this email already exists."}
+    send_email_async.delay(
+        subject="Welcome to DocMate 👋",
+        message=f"Hi {data.full_name},\n\nThanks for registering at DocMate!",
+        recipient_email=data.email,
+    )
     CustomUser.objects.create_user(
         email=data.email,
         full_name=data.full_name,
@@ -46,6 +51,11 @@ def login_user(request, data: LoginSchema):
         return 401, {"detail": "Invalid email or password"}
 
     refresh = RefreshToken.for_user(user)
+    send_email_async.delay(
+        subject="🛡️ Login Notification - DocMate",
+        message=f"Hi {user.full_name},\n\nYou just logged into your account at DocMate.\n\nIf this wasn't you, please reset your password immediately.",
+        recipient_email=user.email,
+    )
 
     return {
         "access": str(refresh.access_token),

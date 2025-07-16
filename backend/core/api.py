@@ -12,6 +12,7 @@ from django.core.files.base import ContentFile
 from .ocr import *
 import os
 from .llm import *
+from .tasks import send_email_async
 api = NinjaAPI()
 doctor_router = Router()
 appointment_router = Router()
@@ -58,6 +59,12 @@ def apply_for_doctor(
         license_document=license_document,
         doctor_profile_pic=doctor_profile_pic,
     )
+    send_email_async.delay(
+    subject='Application Submitted',
+    message=f'Dear {user.full_name},\n\nYour application has been submitted successfully. Kindly wait for further notice.',
+    recipient_email=user.email,
+)
+
 
     return {"message": "Application submitted successfully."}
 
@@ -96,11 +103,25 @@ def review_doctor_application(request, app_id: int, data: ApplicationReviewIn):
 
     application.status = data.status
     application.remarks = data.remarks
-    application.save()  
+    application.save()
+
     if data.status == 'rejected':
+        send_email_async.delay(
+            subject='Application Rejected',
+            message=f'Dear {application.user.full_name},\n\nYour application has been rejected. It does not meet the required credentials.',
+            recipient_email=application.user.email,
+        )
         application.delete()
 
+    elif data.status == 'approved':
+        send_email_async.delay(
+            subject='Application Approved',
+            message=f'Dear {application.user.full_name},\n\nYour application has been approved. Welcome aboard, Dr. {application.user.full_name}!',
+            recipient_email=application.user.email,
+        )
+
     return {"message": f"Application {data.status} successfully"}
+
 
 
 @doctor_router.get('/list', response=List[ApprovedDoctorOut])
@@ -109,7 +130,7 @@ def list_approved_doctors(request):
 
     return [
         ApprovedDoctorOut(
-            id=profile.id,  # ✅ This is important change
+            id=profile.id,  
             full_name=profile.user.full_name,
             name=profile.official_name,
             email=profile.user.email,
@@ -309,6 +330,7 @@ def book_appointment(request, data: AppointmentIn):
                 input_time = slot_time
                 break
             slot_time = (datetime.combine(datetime.today(), slot_time) + timedelta(minutes=30)).time()
+            
 
         if not input_time:
             raise HttpError(400, "No available slots on this date")
@@ -327,6 +349,7 @@ def book_appointment(request, data: AppointmentIn):
 
     if Appointment.objects.filter(doctor=doctor, date=data.date, time=input_time).exists():
         raise HttpError(400, "This slot is already booked")
+    
 
     appointment = Appointment.objects.create(
         user=user,
@@ -338,6 +361,17 @@ def book_appointment(request, data: AppointmentIn):
         patient_phone=data.patient_phone,
         fee_paid=False,
         completed=False,
+    )
+    send_email_async.delay(
+        subject='Appointment Booked Successfully',
+        message=f'Dear {user.full_name},\n\nYour appointment with Dr. {doctor.official_name} has been booked successfully. We will notify you for any updates.',
+        recipient_email=user.email,
+    )
+
+    send_email_async.delay(
+        subject='New Appointment Scheduled',
+        message=f'Dear Dr. {doctor.official_name},\n\nA new appointment has been scheduled by {user.full_name} for {appointment.date} at {appointment.time}. Please check your dashboard.',
+        recipient_email=doctor.user.email,
     )
 
     return {
@@ -426,7 +460,7 @@ def update_appointment_status(request, appointment_id: int, data: UpdateAppointm
         raise HttpError(404, "Doctor profile not found")
 
     try:
-        appointment = Appointment.objects.get(id=appointment_id, doctor=doctor_profile)
+        appointment = Appointment.objects.select_related('user', 'doctor').get(id=appointment_id, doctor=doctor_profile)
     except Appointment.DoesNotExist:
         raise HttpError(404, "Appointment not found")
 
@@ -437,7 +471,49 @@ def update_appointment_status(request, appointment_id: int, data: UpdateAppointm
     appointment.completed = (data.status == 'completed')
     appointment.save()
 
+    patient = appointment.user
+    doctor = appointment.doctor
+
+    # ✅ Compose messages based on status
+    if data.status == 'cancelled':
+        send_email_async.delay(
+            subject='Appointment Cancelled ',
+            message=f"Dear {patient.full_name},\n\nWe regret to inform you that your appointment with Dr. {doctor.official_name} on {appointment.date} at {appointment.time} has been cancelled.",
+            recipient_email=patient.email,
+        )
+        send_email_async.delay(
+            subject='Appointment Cancelled by You',
+            message=f"Dear Dr. {doctor.official_name},\n\nYou have cancelled the appointment with {patient.full_name} scheduled for {appointment.date} at {appointment.time}.",
+            recipient_email=doctor.user.email,
+        )
+
+    elif data.status == 'confirmed':
+        send_email_async.delay(
+            subject='Appointment Confirmed ',
+            message=f"Dear {patient.full_name},\n\nYour appointment with Dr. {doctor.official_name} on {appointment.date} at {appointment.time} has been confirmed.",
+            recipient_email=patient.email,
+        )
+        send_email_async.delay(
+            subject='Appointment Confirmed',
+            message=f"Dear Dr. {doctor.official_name},\n\nYou have confirmed the appointment with {patient.full_name} for {appointment.date} at {appointment.time}.",
+            recipient_email=doctor.user.email,
+        )
+
+    elif data.status == 'completed':
+        send_email_async.delay(
+            subject='Appointment Completed ',
+            message=f"Dear {patient.full_name},\n\nYour appointment with Dr. {doctor.official_name} on {appointment.date} at {appointment.time} has been marked as completed. Thank you for using DocMate.",
+            recipient_email=patient.email,
+        )
+        send_email_async.delay(
+            subject='Appointment Marked as Completed',
+            message=f"Dear Dr. {doctor.official_name},\n\nThe appointment with {patient.full_name} on {appointment.date} at {appointment.time} has been marked as completed.",
+            recipient_email=doctor.user.email,
+        )
+
     return {"detail": f"Appointment marked as {data.status}"}
+
+
 
 @appointment_router.post("/report-scan", response=ReportScanPublicResponse, auth=JWTAuth())
 def create_report_scan(request, image: UploadedFile):
@@ -472,6 +548,8 @@ def create_report_scan(request, image: UploadedFile):
         "emergency": report_obj.emergency,
         "recommended_specializations": raw_specializations
     }
+
+
 
 @appointment_router.get("/doctors-by-specialization", response=List[ApprovedDoctorOut], auth=JWTAuth())
 def get_doctors_by_specialization(request, specialization: str):
@@ -544,14 +622,12 @@ def get_doctor_reviews(request, doctor_id: int):
         ) for review in reviews_qs
     ]
 
-    # ✅ This is the key line:
     has_appointment = Appointment.objects.filter(
         user=request.user,
         doctor=doctor,
         completed=True
     ).exists()
 
-    # ✅ Return as object, not list
     return {
         "reviews": reviews,
         "has_appointment": has_appointment
