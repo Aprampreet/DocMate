@@ -60,10 +60,14 @@ export async function updateUserProfile(formData) {
 }
 
 
-export async function FetchDoctorsList() {
+export async function FetchDoctorsList({ search = "", specialization = "" } = {}) {
   const token = localStorage.getItem("access_token");
 
-  const res = await fetch(`${BASE_URL}/doctor/list`, {
+  const params = new URLSearchParams();
+  if (search) params.append("search", search);
+  if (specialization) params.append("specialization", specialization);
+
+  const res = await fetch(`${BASE_URL}/doctor/list?${params.toString()}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -74,6 +78,7 @@ export async function FetchDoctorsList() {
   if (!res.ok) throw new Error("Failed to fetch doctors");
   return await res.json();
 }
+
 
 export async function fetchDoctorDetail(id) {
   const token = localStorage.getItem("access_token");

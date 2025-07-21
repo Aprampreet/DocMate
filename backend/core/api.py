@@ -3,6 +3,8 @@ from ninja.files import UploadedFile
 from .models import *
 from .schemas import *
 from auth_app.auth_backend import JWTAuth
+from ninja import Query
+from django.db.models import Q
 from auth_app.api import auth_router
 from typing import List
 from ninja.errors import HttpError
@@ -125,8 +127,15 @@ def review_doctor_application(request, app_id: int, data: ApplicationReviewIn):
 
 
 @doctor_router.get('/list', response=List[ApprovedDoctorOut])
-def list_approved_doctors(request):
+def list_approved_doctors(request, search: Optional[str] = Query(None), specialization: Optional[str] = Query(None)):
     approved_profiles = DoctorProfile.objects.select_related('user').all()
+    if search:
+        approved_profiles = approved_profiles.filter(
+            Q(official_name__icontains=search) |
+            Q(user__full_name__icontains=search)
+        )
+    if specialization:
+        approved_profiles = approved_profiles.filter(specialization__icontains=specialization)
 
     return [
         ApprovedDoctorOut(
@@ -474,7 +483,6 @@ def update_appointment_status(request, appointment_id: int, data: UpdateAppointm
     patient = appointment.user
     doctor = appointment.doctor
 
-    # ✅ Compose messages based on status
     if data.status == 'cancelled':
         send_email_async.delay(
             subject='Appointment Cancelled ',
